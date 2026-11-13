@@ -1,2 +1,2 @@
-hola papus equisde
-aqui esta nuestro proyecto super increible
+Plataforma en la que se puede registrar las tareas por fecha. La plataforma se encarga de guardar las tareas, ordenarlas de tal forma que le muetre primero las que son proximas a entregarse, sacarlas del sistema una vez el usuario las marque como completadas, y mostrar que tareas no fueron entregadas a tiempo.
+Tambien, la plataforma permite al usuario buscar una tarea por distintos filtros, como la materia, el nombre de la misma tarea, etc.
