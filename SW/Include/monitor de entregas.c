@@ -1,134 +1,137 @@
 #include <stdio.h>
 #include "monitor_de_entregas.h"
 
-/* --- Funciones auxiliares internas de fecha --- */
-
-static int es_bisiesto(int anio) {
-    return (anio % 4 == 0 && anio % 100 != 0) || (anio % 400 == 0);
-}
-
-static int dias_del_mes(int mes, int anio) {
-    int dias[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    if (mes == 2 && es_bisiesto(anio)) {
-        return 29;
-    }
-    if (mes >= 1 && mes <= 12) {
-        return dias[mes];
+/* Devuelve 1 si el anio es bisiesto (febrero con 29 dias), 0 si no */
+int es_bisiesto(int anio) {
+    if ((anio % 4 == 0 && anio % 100 != 0) || anio % 400 == 0) {
+        return 1;
     }
     return 0;
 }
 
-static long fecha_a_dias(struct Fecha f) {
-    long total = f.dia;
-    for (int y = 1; y < f.anio; y++) {
-        total += es_bisiesto(y) ? 366 : 365;
+/* Convierte una fecha en "numero de dia" contando desde el anio 1.
+   Con dos de estos numeros, restar da los dias de diferencia. */
+int contar_dias(struct Fecha f) {
+    int dias_antes_del_mes[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+    int anios_completos = f.anio - 1;
+    int dias;
+
+    /* 365 por cada anio completo + 1 por cada anio bisiesto que ya paso */
+    dias = anios_completos * 365 + anios_completos / 4
+           - anios_completos / 100 + anios_completos / 400;
+
+    dias = dias + dias_antes_del_mes[f.mes - 1] + f.dia;
+
+    /* si ya pasamos febrero de un anio bisiesto, falta sumar el 29 */
+    if (f.mes > 2 && es_bisiesto(f.anio) == 1) {
+        dias = dias + 1;
     }
-    for (int m = 1; m < f.mes; m++) {
-        total += dias_del_mes(m, f.anio);
-    }
-    return total;
+    return dias;
 }
 
-/* --- Implementacion de monitor_de_entregas.h --- */
-
 int diferencia_dias(struct Fecha desde, struct Fecha hasta) {
-    return (int)(fecha_a_dias(hasta) - fecha_a_dias(desde));
+    return contar_dias(hasta) - contar_dias(desde);
 }
 
 int esta_por_vencer(struct Tarea t, struct Fecha hoy, int dias_limite) {
-    /* En datos_de_tareas.h: 0 = Pendiente, 1 = Completada */
-    if (t.estado != 0) {
-        return 0;
+    if (t.estado == 0 && diferencia_dias(hoy, t.fecha_entrega) <= dias_limite) {
+        return 1;
     }
-    int dias = diferencia_dias(hoy, t.fecha_entrega);
-    return (dias <= dias_limite) ? 1 : 0;
+    return 0;
 }
 
 int mostrar_tareas_proximas(struct Tarea agenda[], int total, struct Fecha hoy, int dias_limite) {
-    struct Tarea filtradas[MAX_TAREAS];
-    int encontrados = 0;
+    int i;
+    int p;
+    int dif;
+    int encontradas = 0;
 
-    for (int i = 0; i < total; i++) {
-        if (esta_por_vencer(agenda[i], hoy, dias_limite)) {
-            filtradas[encontrados++] = agenda[i];
+    /* Primero contamos cuantas hay */
+    for (i = 0; i < total; i++) {
+        if (esta_por_vencer(agenda[i], hoy, dias_limite) == 1) {
+            encontradas++;
         }
     }
 
-    if (encontrados == 0) {
+    /* Si no hay ninguna, no molestamos al usuario con una alerta */
+    if (encontradas == 0) {
         return 0;
     }
 
-    /* Ordenar por prioridad: 1 (Alta) va antes que 2 (Media) y 3 (Baja) */
-    for (int i = 0; i < encontrados - 1; i++) {
-        for (int j = 0; j < encontrados - i - 1; j++) {
-            if (filtradas[j].prioridad > filtradas[j + 1].prioridad) {
-                struct Tarea temp = filtradas[j];
-                filtradas[j] = filtradas[j + 1];
-                filtradas[j + 1] = temp;
+    printf("\n*** ALERTA: tienes %d tarea(s) que vencen en %d dias o menos ***\n",
+           encontradas, dias_limite);
+    imprimir_encabezado();
+
+    /* Prioridad 1 (Alta), luego 2 (Media), luego 3 (Baja) */
+    for (p = 1; p <= 3; p++) {
+        for (i = 0; i < total; i++) {
+            if (esta_por_vencer(agenda[i], hoy, dias_limite) == 1 &&
+                agenda[i].prioridad == p) {
+
+                imprimir_tarea(agenda[i]);
+                dif = diferencia_dias(hoy, agenda[i].fecha_entrega);
+
+                if (dif < 0) {
+                    printf("   >> VENCIDA hace %d dia(s)\n", -dif);
+                } else if (dif == 0) {
+                    printf("   >> VENCE HOY\n");
+                } else if (dif == 1) {
+                    printf("   >> Vence MANANA\n");
+                } else {
+                    printf("   >> Vence en %d dias\n", dif);
+                }
             }
         }
     }
-
-    printf("\n=== ALERTAS: TAREAS PROXIMAS / POR VENCER ===\n");
-    imprimir_encabezado();
-    for (int i = 0; i < encontrados; i++) {
-        int dias = diferencia_dias(hoy, filtradas[i].fecha_entrega);
-        imprimir_tarea(filtradas[i]);
-        if (dias < 0) {
-            printf("   -> ALERTA: Vencida hace %d dia(s)\n", -dias);
-        } else if (dias == 0) {
-            printf("   -> ALERTA: Vence HOY\n");
-        } else {
-            printf("   -> ALERTA: Faltan %d dia(s)\n", dias);
-        }
-    }
-
-    return encontrados;
+    return encontradas;
 }
 
 int mostrar_tareas_vencidas(struct Tarea agenda[], int total, struct Fecha hoy) {
-    int encontrados = 0;
+    int i;
+    int dif;
+    int encontradas = 0;
 
-    for (int i = 0; i < total; i++) {
-        if (agenda[i].estado == 0 && diferencia_dias(hoy, agenda[i].fecha_entrega) < 0) {
-            if (encontrados == 0) {
-                printf("\n=== TAREAS PENDIENTES VENCIDAS ===\n");
-                imprimir_encabezado();
-            }
+    imprimir_encabezado();
+
+    for (i = 0; i < total; i++) {
+        dif = diferencia_dias(hoy, agenda[i].fecha_entrega);
+
+        if (agenda[i].estado == 0 && dif < 0) {
             imprimir_tarea(agenda[i]);
-            encontrados++;
+            printf("   >> VENCIDA hace %d dia(s)\n", -dif);
+            encontradas++;
         }
     }
 
-    return encontrados;
+    if (encontradas == 0) {
+        printf("No hay tareas vencidas.\n");
+    }
+    return encontradas;
 }
 
 int editar_fecha_entrega(struct Tarea agenda[], int total, int id) {
-    int indice = -1;
+    int i;
+    struct Fecha nueva;
 
-    for (int i = 0; i < total; i++) {
+    for (i = 0; i < total; i++) {
         if (agenda[i].id_tarea == id) {
-            indice = i;
-            break;
+
+            printf("Nuevo dia (1-31): ");
+            scanf("%d", &nueva.dia);
+            printf("Nuevo mes (1-12): ");
+            scanf("%d", &nueva.mes);
+            printf("Nuevo anio (ejemplo 2026): ");
+            scanf("%d", &nueva.anio);
+
+            if (fecha_valida(nueva) == 0) {
+                printf("Formato de fecha incorrecto. Intente con Dia/Mes/Anio.\n");
+                return -1;
+            }
+
+            agenda[i].fecha_entrega = nueva;
+            printf("La fecha de la tarea %d se actualizo correctamente.\n", id);
+            return 1;
         }
     }
-
-    if (indice == -1) {
-        return 0; /* No existe el ID */
-    }
-
-    struct Fecha nueva_fecha;
-    printf("Ingrese la nueva fecha de entrega para la tarea [ID %d] (DD MM AAAA): ", id);
-    if (scanf("%d %d %d", &nueva_fecha.dia, &nueva_fecha.mes, &nueva_fecha.anio) != 3) {
-        while (getchar() != '\n');
-        return -1;
-    }
-
-    /* Validamos tanto con fecha_valida como con los dias exactos del mes */
-    if (!fecha_valida(nueva_fecha) || nueva_fecha.dia > dias_del_mes(nueva_fecha.mes, nueva_fecha.anio)) {
-        return -1; /* Fecha incorrecta */
-    }
-
-    agenda[indice].fecha_entrega = nueva_fecha;
-    return 1;
+    return 0; /* no existe ese ID */
 }

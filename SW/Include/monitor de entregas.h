@@ -28,4 +28,5 @@ int mostrar_tareas_vencidas(struct Tarea agenda[], int total, struct Fecha hoy);
    Devuelve 1 si la cambio, 0 si no existe el ID, -1 si la fecha era incorrecta. */
 int editar_fecha_entrega(struct Tarea agenda[], int total, int id);
 
-#endif /* MONITOR_DE_ENTREGAS_H */
+#endif
+
